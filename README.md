@@ -12,16 +12,16 @@ Arquitectura AWS de 3 capas con alta disponibilidad, seguridad por defecto y des
 Internet
     │
     ▼
-[ALB] ── Subredes Públicas (10.0.1.0/24, 10.0.2.0/24)
+[ALB] - Subredes Públicas (10.0.1.0/24, 10.0.2.0/24)
     │
     ▼
-[EC2 Website × 2] ── Subredes Privadas App (10.0.11.0/24, 10.0.12.0/24)
+[EC2 Website × 2] - Subredes Privadas App (10.0.11.0/24, 10.0.12.0/24)
     │
     ▼
-[EC2 Backend × 2] ── Subredes Privadas App (10.0.11.0/24, 10.0.12.0/24)
+[EC2 Backend × 2] - Subredes Privadas App (10.0.11.0/24, 10.0.12.0/24)
     │
     ▼
-[RDS MySQL Primary ↔ Failover] ── Subredes Privadas DB (10.0.21.0/24, 10.0.22.0/24)
+[RDS MySQL Primary ↔ Failover] - Subredes Privadas DB (10.0.21.0/24, 10.0.22.0/24)
 
 Salida a Internet (EC2 privadas) → NAT Instance (t3.micro, Free Tier)
 ```
@@ -42,7 +42,7 @@ Salida a Internet (EC2 privadas) → NAT Instance (t3.micro, Free Tier)
 ## Decisiones de Diseño
 
 ### NAT Instance en lugar de NAT Gateway
-NAT Gateway tiene un costo fijo de ~$32/mes independiente del uso. Una NAT Instance t3.micro cubre el mismo caso de uso — enrutar tráfico de salida de las EC2 privadas hacia Internet — con `source_dest_check = false` e `iptables MASQUERADE`, sin costo durante el primer año en Free Tier.
+NAT Gateway tiene un costo fijo de ~$32/mes independiente del uso. Una NAT Instance t3.micro cubre el mismo caso de uso enrutar tráfico de salida de las EC2 privadas hacia Internet con `source_dest_check = false` e `iptables MASQUERADE`, sin costo durante el primer año en Free Tier.
 
 ### IAM OIDC para GitHub Actions
 Los workflows se autentican contra AWS mediante tokens JWT firmados por GitHub, sin necesidad de almacenar `AWS_ACCESS_KEY_ID` ni `AWS_SECRET_ACCESS_KEY` como secretos. AWS valida el token contra el OIDC provider y emite credenciales temporales vía `sts:AssumeRoleWithWebIdentity`. Rotación automática, sin secretos de larga duración.
@@ -80,7 +80,7 @@ aws-3tier-enterprise/
 │   │   ├── database/                 # RDS MySQL 8.0 Multi-AZ, Parameter Group utf8mb4
 │   │   └── storage/                  # S3 privado + CloudFront OAC
 │   └── environments/
-│       └── prod/                     # Punto de entrada — llama a los 4 módulos
+│       └── prod/                     # Punto de entrada - llama a los 4 módulos
 │           ├── main.tf
 │           ├── variables.tf
 │           ├── outputs.tf
@@ -92,7 +92,7 @@ aws-3tier-enterprise/
 │   └── backend/                      # Node.js + Express + Sequelize
 ├── scripts/
 │   ├── bootstrap.ps1                 # Crea bucket S3 de estado remoto
-│   ├── user_data.sh                  # Plantilla EC2 — templatefile() de Terraform
+│   ├── user_data.sh                  # Plantilla EC2 - templatefile() de Terraform
 │   └── validate.ps1                  # Validaciones automáticas post-deploy
 └── .github/
     └── workflows/
