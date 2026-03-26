@@ -1,6 +1,10 @@
+![Terraform](https://img.shields.io/badge/Terraform-1.10+-purple)
+![AWS](https://img.shields.io/badge/AWS-us--east--1-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 # aws-3tier-enterprise
 
-Arquitectura AWS de 3 capas con alta disponibilidad, seguridad por defecto y despliegue automatizado mediante GitHub Actions + Terraform.
+Arquitectura AWS de 3 capas con alta disponibilidad, seguridad por defecto y despliegue automatizado mediante GitHub Actions + Terraform. Diseñada para maximizar cobertura arquitectónica dentro de los límites del AWS Free Tier.
 
 ## Topología
 
@@ -24,104 +28,76 @@ Salida a Internet (EC2 privadas) → NAT Instance (t3.micro, Free Tier)
 
 ## Stack Tecnológico
 
-| Capa       | Tecnología                          |
-|------------|-------------------------------------|
-| Frontend   | S3 estático + CloudFront (OAC)      |
-| Backend    | Node.js 20 + PM2, EC2 t3.micro      |
-| Base datos | RDS MySQL 8.0, db.t3.micro, Multi-AZ|
-| IaC        | Terraform 1.x, módulos reutilizables|
-| CI/CD      | GitHub Actions + OIDC (sin claves)  |
-| Acceso EC2 | AWS Systems Manager (sin SSH)       |
-| NAT        | NAT Instance t3.micro (Free Tier)   |
+| Capa          | Tecnología                                                      |
+|---------------|-----------------------------------------------------------------|
+| Frontend      | S3 estático + CloudFront (OAC)                                  |
+| Backend       | Node.js 20 + PM2, EC2 t3.micro                                  |
+| Base de datos | RDS MySQL 8.0, db.t3.micro, Multi-AZ                            |
+| IaC           | Terraform >= 1.10, módulos reutilizables                        |
+| CI/CD         | GitHub Actions + OIDC (sin claves de larga duración)            |
+| Acceso EC2    | AWS Systems Manager Session Manager (sin SSH)                   |
+| NAT           | NAT Instance t3.micro (Free Tier)                               |
+| Estado remoto | S3 + `use_lockfile = true` (Terraform >= 1.10, sin DynamoDB)    |
 
 ## Decisiones de Diseño
 
-### Por qué NAT Instance y no NAT Gateway
-NAT Gateway cuesta ~$32/mes fijo + transferencia. Una NAT Instance t3.micro entra en Free Tier (750 h/mes el primer año) y realiza exactamente la misma función para tráfico de salida moderado.
+### NAT Instance en lugar de NAT Gateway
+NAT Gateway tiene un costo fijo de ~$32/mes independiente del uso. Una NAT Instance t3.micro cubre el mismo caso de uso — enrutar tráfico de salida de las EC2 privadas hacia Internet — con `source_dest_check = false` e `iptables MASQUERADE`, sin costo durante el primer año en Free Tier.
 
-### Por qué IAM OIDC para GitHub Actions
-Elimina la necesidad de almacenar `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` en secretos de GitHub. El workflow obtiene credenciales temporales firmadas por el token JWT de GitHub — rotación automática, sin secretos de larga duración.
+### IAM OIDC para GitHub Actions
+Los workflows se autentican contra AWS mediante tokens JWT firmados por GitHub, sin necesidad de almacenar `AWS_ACCESS_KEY_ID` ni `AWS_SECRET_ACCESS_KEY` como secretos. AWS valida el token contra el OIDC provider y emite credenciales temporales vía `sts:AssumeRoleWithWebIdentity`. Rotación automática, sin secretos de larga duración.
 
-### Por qué SSM en lugar de llaves SSH
-- Sin gestión de pares de claves
-- Sin puertos 22 abiertos (reduce superficie de ataque)
-- Sesiones auditadas en CloudTrail
-- Acceso desde consola AWS sin VPN
+### AWS Systems Manager en lugar de SSH
+- Sin gestión de pares de claves ni puertos 22 abiertos
+- Reduce la superficie de ataque de los Security Groups
+- Sesiones auditadas en AWS CloudTrail
+- Acceso desde consola AWS o CLI sin requerir VPN ni bastión
+
+### Estado remoto con S3 native locking
+Desde Terraform 1.10, el backend S3 soporta locking nativo mediante `use_lockfile = true`. Terraform escribe un objeto `.tflock` en el mismo bucket usando S3 conditional writes (`If-None-Match: *`), eliminando la dependencia de DynamoDB para la coordinación de estado concurrente.
 
 ## Requisitos Previos
 
-- Terraform >= 1.5
+- Terraform >= 1.10.0
 - AWS CLI v2 configurado (`aws configure`)
 - Cuenta GitHub con repositorio `carlossanchezcloud/aws-3tier-enterprise`
-- PowerShell 7+ (para scripts Windows)
+- PowerShell 7+ (scripts de bootstrap y validación)
 
-## Despliegue — Paso a Paso
+## Bootstrap
 
-### 1. Bootstrap (solo primera vez)
-
-```powershell
-.\scripts\bootstrap.ps1
-```
-
-Crea el bucket S3 y tabla DynamoDB para el estado remoto de Terraform.
-
-### 2. Inicializar Terraform
-
-```bash
-cd terraform/environments/prod
-terraform init
-```
-
-### 3. Revisar plan
-
-```bash
-terraform plan -var-file="terraform.tfvars"
-```
-
-### 4. Aplicar
-
-```bash
-terraform apply -var-file="terraform.tfvars"
-```
-
-### 5. Validar despliegue
-
-```powershell
-.\scripts\validate.ps1
-```
-
-Genera `validate_report.txt` con estado de todos los recursos.
+Antes del primer `terraform init`, ejecutar `scripts/bootstrap.ps1` para crear el bucket S3 de estado remoto con versionado, cifrado AES-256 y bloqueo de acceso público. El locking se gestiona con S3 native locking — no se crea ningún recurso adicional de DynamoDB.
 
 ## Estructura del Repositorio
 
 ```
 aws-3tier-enterprise/
-├── .gitignore                        # Protege secretos y estado
+├── .gitignore                        # Excluye *.tfvars, .terraform/, *.tfstate
 ├── README.md
 ├── terraform/
 │   ├── modules/
-│   │   ├── networking/               # VPC, subredes, NAT, SGs
-│   │   ├── compute/                  # ASG, ALB, Launch Template
-│   │   ├── database/                 # RDS MySQL Multi-AZ
-│   │   └── storage/                  # S3 + CloudFront OAC
+│   │   ├── networking/               # VPC, subredes, NAT Instance, 4 SGs, rutas
+│   │   ├── compute/                  # ALB, ASG, Launch Template (IMDSv2), IAM/SSM
+│   │   ├── database/                 # RDS MySQL 8.0 Multi-AZ, Parameter Group utf8mb4
+│   │   └── storage/                  # S3 privado + CloudFront OAC
 │   └── environments/
-│       └── prod/                     # Punto de entrada Terraform
+│       └── prod/                     # Punto de entrada — llama a los 4 módulos
 │           ├── main.tf
 │           ├── variables.tf
 │           ├── outputs.tf
 │           ├── providers.tf
-│           └── terraform.tfvars      # ← en .gitignore (secretos)
+│           ├── iam_oidc.tf           # OIDC provider + IAM Role GitHub Actions
+│           └── terraform.tfvars      # ← en .gitignore (credenciales sensibles)
 ├── app/
-│   ├── frontend/                     # React / Vite
-│   └── backend/                      # Node.js / Express
+│   ├── frontend/                     # React + Vite
+│   └── backend/                      # Node.js + Express + Sequelize
 ├── scripts/
-│   ├── bootstrap.ps1                 # Crea backend S3 + DynamoDB
-│   ├── user_data.sh                  # Plantilla EC2 user_data
-│   └── validate.ps1                  # Validaciones post-deploy
+│   ├── bootstrap.ps1                 # Crea bucket S3 de estado remoto
+│   ├── user_data.sh                  # Plantilla EC2 — templatefile() de Terraform
+│   └── validate.ps1                  # Validaciones automáticas post-deploy
 └── .github/
     └── workflows/
-        ├── infra.yml                 # PR → fmt/lint/tfsec/plan
-        └── app.yml                   # Push main → build/deploy
+        ├── infra.yml                 # PR → fmt · tflint · tfsec · validate · plan
+        └── app.yml                   # Push main → build · S3 sync · CF invalidation
 ```
 
 ## Security Groups — Flujo de Red
@@ -130,17 +106,7 @@ aws-3tier-enterprise/
 Internet → sg_alb (80, 443) → sg_website (80, 3000) → sg_backend (3000) → sg_database (3306)
 ```
 
-Ninguna capa expone puertos directamente a Internet excepto el ALB.
-
-## Variables Sensibles
-
-Nunca hardcodear en código. Usar `terraform.tfvars` (excluido de Git):
-
-```hcl
-db_password = "TuPasswordSeguro2026"
-```
-
-En producción, migrar a AWS Secrets Manager o SSM Parameter Store SecureString.
+Ninguna capa expone puertos directamente a Internet excepto el ALB. RDS no tiene endpoint público y las EC2 de backend no tienen IP pública.
 
 ## Licencia
 
