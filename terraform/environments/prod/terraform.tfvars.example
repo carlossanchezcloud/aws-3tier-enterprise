@@ -1,0 +1,16 @@
+# =============================================================
+# terraform.tfvars.example
+#
+# Copiar este archivo como terraform.tfvars y completar los valores.
+# terraform.tfvars está en .gitignore — NUNCA subir al repositorio.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+# =============================================================
+
+# Contraseña de RDS MySQL
+# Requisitos: min 8 caracteres, letras y números
+db_password = "CAMBIAR_POR_PASSWORD_SEGURO_2026"
+
+# Opcional: sobrescribir defaults
+# aws_region   = "us-east-1"
+# project_name = "aws-3tier"

@@ -1,0 +1,99 @@
+name: App — Build & Deploy Frontend
+
+# Ejecuta en cada push a main (merge de PR).
+# Build del frontend React/Vite → S3 sync → CloudFront invalidation.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/frontend/**"
+      - ".github/workflows/app.yml"
+
+permissions:
+  id-token: write  # Necesario para OIDC
+  contents: read
+
+jobs:
+  deploy:
+    name: Build · S3 Sync · CloudFront Invalidation
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Node.js ───────────────────────────────────────
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+
+      # ── 3. Instalar dependencias ───────────────────────────────
+      # npm ci usa package-lock.json exacto — reproducible y más rápido
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: app/frontend
+
+      # ── 4. Build del frontend ──────────────────────────────────
+      # VITE_API_URL apunta al DNS del ALB (configurado como GitHub Variable)
+      # Los assets generados por Vite incluyen hash → cache busting automático
+      - name: Build
+        run: npm run build
+        working-directory: app/frontend
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
+          NODE_ENV: production
+
+      # ── 5. Autenticación AWS via OIDC ─────────────────────────
+      # Sin secretos de larga duración — credenciales temporales ~1h
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::301782008040:role/aws-3tier-github-actions-role
+          aws-region: us-east-1
+          role-session-name: GitHubActions-Deploy-${{ github.run_id }}
+
+      # ── 6. S3 Sync ─────────────────────────────────────────────
+      # --delete: elimina del bucket los archivos que ya no existen en dist/
+      # Los assets con hash nunca cambian de nombre, pero los nuevos se suben
+      # y los viejos se borran.
+      - name: Deploy to S3
+        run: |
+          aws s3 sync ./app/frontend/dist \
+            s3://${{ vars.S3_FRONTEND_BUCKET }} \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.json"
+
+          # index.html y manifests: sin cache (siempre fresco)
+          aws s3 sync ./app/frontend/dist \
+            s3://${{ vars.S3_FRONTEND_BUCKET }} \
+            --exclude "*" \
+            --include "index.html" \
+            --include "*.json" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      # ── 7. CloudFront Invalidation ─────────────────────────────
+      # Invalida /* para que los edges descarten la cache.
+      # Los assets con hash no necesitan invalidación (nueva URL = nuevo objeto),
+      # pero index.html sí — la invalidación lo fuerza.
+      - name: CloudFront Invalidation
+        run: |
+          INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text)
+          echo "Invalidation ID: $INVALIDATION_ID"
+
+      # ── 8. Resumen del deploy ──────────────────────────────────
+      - name: Deploy Summary
+        run: |
+          echo "### Deploy completado" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bucket**: ${{ vars.S3_FRONTEND_BUCKET }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CloudFront**: https://${{ vars.CLOUDFRONT_DOMAIN }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

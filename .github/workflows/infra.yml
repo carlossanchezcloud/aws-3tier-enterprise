@@ -1,0 +1,138 @@
+name: Infra — Lint, Security & Plan
+
+# Ejecuta en cada Pull Request hacia main.
+# NO aplica cambios — solo valida calidad y genera el plan.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/infra.yml"
+
+permissions:
+  id-token: write  # Necesario para OIDC
+  contents: read
+  pull-requests: write  # Para publicar el plan como comentario en el PR
+
+env:
+  TF_DIR: terraform/environments/prod
+  TF_VERSION: "1.14.5"
+
+jobs:
+  validate:
+    name: Fmt · Lint · Security · Plan
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Setup Terraform ─────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── 3. terraform fmt -check ────────────────────────────────
+      # Falla si algún archivo .tf no está formateado correctamente.
+      # Ejecutar localmente: terraform fmt -recursive
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+        working-directory: terraform
+
+      # ── 4. tflint ─────────────────────────────────────────────
+      # Detecta errores de configuración, recursos deprecados y
+      # malas prácticas específicas del provider AWS.
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: TFLint Init
+        run: tflint --init
+        working-directory: ${{ env.TF_DIR }}
+
+      - name: TFLint Run
+        run: tflint --recursive --format compact
+        working-directory: ${{ env.TF_DIR }}
+
+      # ── 5. tfsec — Security Scanning ──────────────────────────
+      # Falla si detecta:
+      #   - Security Groups abiertos a 0.0.0.0/0 (excepto sg_alb — intencionado)
+      #   - RDS sin cifrado
+      #   - S3 con acceso público
+      #   - EBS sin cifrado
+      #
+      # Los ingress 80/443 del ALB desde 0.0.0.0/0 son INTENCIONALES.
+      # El comentario #tfsec:ignore en networking/main.tf los excluye.
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          working_directory: terraform
+          soft_fail: false
+          additional_args: >-
+            --exclude-downloaded-modules
+            --minimum-severity HIGH
+
+      # ── 6. Autenticación AWS via OIDC ─────────────────────────
+      # Sin secretos de larga duración — credenciales temporales ~1h
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::301782008040:role/aws-3tier-github-actions-role
+          aws-region: us-east-1
+          role-session-name: GitHubActions-TFPlan-${{ github.run_id }}
+
+      # ── 7. terraform init ─────────────────────────────────────
+      - name: Terraform Init
+        run: terraform init -input=false
+        working-directory: ${{ env.TF_DIR }}
+
+      # ── 8. terraform validate ─────────────────────────────────
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: ${{ env.TF_DIR }}
+
+      # ── 9. terraform plan ─────────────────────────────────────
+      # db_password viene de GitHub Secrets — nunca se imprime en logs
+      # (Terraform lo marca como sensitive y lo enmascara con ***)
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -var="db_password=${{ secrets.TF_DB_PASSWORD }}" \
+            -no-color \
+            -out=tfplan
+        working-directory: ${{ env.TF_DIR }}
+        continue-on-error: true  # Publicar el resultado en el PR aunque falle
+
+      # ── 10. Publicar plan como comentario en el PR ─────────────
+      - name: Comment Plan on PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN: ${{ steps.plan.outputs.stdout }}
+        with:
+          script: |
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
+            <details><summary>Ver Plan Completo</summary>
+
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+            </details>
+
+            *Triggered by: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      # Fallar el job si el plan falló
+      - name: Check Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1

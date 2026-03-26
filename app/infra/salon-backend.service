@@ -1,0 +1,33 @@
+# /etc/systemd/system/salon-backend.service
+# Mantiene el proceso Node.js corriendo en el EC2 backend (subred privada)
+# Instalación:
+#   sudo cp salon-backend.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable salon-backend
+#   sudo systemctl start salon-backend
+
+[Unit]
+Description=Salon de Belleza - Backend API (Node.js + Express)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/salon-belleza/backend
+
+# Carga el .env desde el directorio de trabajo
+EnvironmentFile=/home/ec2-user/salon-belleza/backend/.env
+
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=salon-backend
+
+# Seguridad: limitar permisos del proceso
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

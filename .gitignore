@@ -1,0 +1,73 @@
+# =============================================================
+# Terraform — NUNCA subir a GitHub
+# =============================================================
+*.tfvars
+*.tfvars.json
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# =============================================================
+# Secretos y credenciales
+# =============================================================
+.env
+.env.*
+.env.local
+.env.production
+*.pem
+*.key
+secrets/
+credentials.json
+
+# =============================================================
+# Node.js
+# =============================================================
+node_modules/
+dist/
+build/
+.next/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm
+.yarn/cache
+.yarn/unplugged
+.yarn/install-state.gz
+.pnp.*
+
+# =============================================================
+# Scripts de validación — reportes generados
+# =============================================================
+validate_report*.txt
+
+# =============================================================
+# Sistema operativo Windows
+# =============================================================
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+ehthumbs.db
+
+# =============================================================
+# macOS
+# =============================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# =============================================================
+# IDEs
+# =============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
