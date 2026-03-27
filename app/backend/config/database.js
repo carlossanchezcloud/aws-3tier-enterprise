@@ -1,6 +1,6 @@
 // config/database.js
-// Conexión a RDS PostgreSQL usando variables de entorno
-// El backend está en subred privada → accede a RDS por IP interna (sin pasar por Internet)
+// Conexion a RDS MySQL usando variables de entorno
+// El backend esta en subred privada → accede a RDS por IP interna (sin pasar por Internet)
 
 require('dotenv').config();
 const { Sequelize } = require('sequelize');
@@ -8,11 +8,11 @@ const { Sequelize } = require('sequelize');
 const sequelize = new Sequelize(
     process.env.DB_NAME,
     process.env.DB_USER,
-    process.env.DB_PASSWORD,
+    process.env.DB_PASS,
     {
         host:    process.env.DB_HOST,
-        port:    Number(process.env.DB_PORT) || 5432,
-        dialect: 'postgres',
+        port:    Number(process.env.DB_PORT) || 3306,
+        dialect: 'mysql',
 
         // Pool de conexiones: ajustar según carga esperada
         pool: {
@@ -22,13 +22,7 @@ const sequelize = new Sequelize(
             idle:    10000  // ms antes de liberar una conexión inactiva
         },
 
-        // SSL obligatorio en RDS (modo producción)
-        dialectOptions: process.env.NODE_ENV === 'production' ? {
-            ssl: {
-                require:            true,
-                rejectUnauthorized: true  // valida certificado RDS
-            }
-        } : {},
+        dialectOptions: {},
 
         logging: process.env.NODE_ENV === 'development'
             ? (msg) => console.log('[SQL]', msg)
