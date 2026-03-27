@@ -34,12 +34,9 @@ export default function Servicios() {
         setLoading(true);
         setError(null);
         try {
-            // Pasa ?all=true para ver también los desactivados
-            const url = mostrarTodos
-                ? '/servicios?all=true'
-                : '/servicios';
             const data = await serviciosApi.getAll();
-            setServicios(data);
+            const lista = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+            setServicios(lista);
         } catch (err) {
             setError(err.message);
         } finally {

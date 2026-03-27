@@ -18,7 +18,8 @@ export default function Clientes() {
         setError(null);
         try {
             const data = await clientesApi.getAll();
-            setClientes(data);
+            const lista = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+            setClientes(lista);
         } catch (err) {
             setError(err.message);
         } finally {

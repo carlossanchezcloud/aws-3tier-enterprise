@@ -32,9 +32,10 @@ export default function Turnos() {
                 clientesApi.getAll(),
                 serviciosApi.getAll()
             ]);
-            setTurnos(t);
-            setClientes(c);
-            setServicios(s);
+            const norm = raw => Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+            setTurnos(norm(t));
+            setClientes(norm(c));
+            setServicios(norm(s));
         } catch (err) {
             setError(err.message);
         } finally {
