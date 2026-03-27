@@ -79,8 +79,3 @@ output "rds_identifier" {
   value       = module.database.rds_identifier
 }
 
-# ── IAM ───────────────────────────────────────────────────────
-output "github_actions_role_arn" {
-  description = "ARN del IAM Role para GitHub Actions — usar como role-to-assume en workflows"
-  value       = aws_iam_role.github_actions.arn
-}

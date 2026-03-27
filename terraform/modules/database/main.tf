@@ -16,7 +16,7 @@ locals {
 # aunque Multi-AZ se configure aparte.
 resource "aws_db_subnet_group" "main" {
   name        = "${local.name}-db-subnet-group"
-  description = "Subnet group para RDS MySQL — subredes privadas DB (AZ1 + AZ2)"
+  description = "DB Subnet Group for aws-3tier-enterprise"
   subnet_ids  = var.db_subnet_ids
 
   tags = merge(var.tags, {
@@ -107,7 +107,7 @@ resource "aws_db_instance" "main" {
   multi_az = var.multi_az
 
   # Backups
-  backup_retention_period = var.backup_retention_days
+  backup_retention_period = 0
   backup_window           = "03:00-04:00"      # UTC — 00:00-01:00 EST
   maintenance_window      = "Mon:04:00-Mon:05:00"
 

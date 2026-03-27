@@ -55,9 +55,9 @@ variable "db_password" {
 }
 
 variable "multi_az" {
-  description = "Habilita Multi-AZ (Primary AZ1 + Failover AZ2)"
+  description = "Habilitar Multi-AZ en RDS"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "skip_final_snapshot" {
@@ -66,11 +66,6 @@ variable "skip_final_snapshot" {
   default     = true
 }
 
-variable "backup_retention_days" {
-  description = "Días de retención de backups automáticos (0 = deshabilitado)"
-  type        = number
-  default     = 7
-}
 
 variable "tags" {
   description = "Tags comunes aplicados a todos los recursos"

@@ -113,11 +113,11 @@ data "aws_ami" "amazon_linux_2" {
 # - Permite todo el tráfico saliente hacia Internet
 resource "aws_security_group" "nat" {
   name        = "${local.name}-sg-nat"
-  description = "NAT Instance: acepta trafico de la VPC y lo reenvía a Internet"
+  description = "NAT Instance - VPC traffic to Internet"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "Todo el trafico desde la VPC"
+    description = "All traffic from VPC"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -125,7 +125,7 @@ resource "aws_security_group" "nat" {
   }
 
   egress {
-    description = "Todo el trafico hacia Internet"
+    description = "All traffic to Internet"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -319,11 +319,11 @@ resource "aws_route_table_association" "private_db" {
 # ── sg_alb: punto de entrada público ─────────────────────────
 resource "aws_security_group" "alb" {
   name        = "${local.name}-sg-alb"
-  description = "ALB: acepta HTTP/HTTPS desde Internet, reenvía a capa Website"
+  description = "ALB - HTTP and HTTPS from Internet"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description = "HTTP desde Internet"
+    description = "HTTP from Internet"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -331,7 +331,7 @@ resource "aws_security_group" "alb" {
   }
 
   ingress {
-    description = "HTTPS desde Internet"
+    description = "HTTPS from Internet"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -340,7 +340,7 @@ resource "aws_security_group" "alb" {
 
   # Egress a CIDRs de app (no SG ref) para evitar ciclo con sg_website
   egress {
-    description = "Reenviar trafico a subredes privadas app"
+    description = "Forward traffic to private app subnets"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -355,11 +355,11 @@ resource "aws_security_group" "alb" {
 # ── sg_website: capa de presentación ─────────────────────────
 resource "aws_security_group" "website" {
   name        = "${local.name}-sg-website"
-  description = "Website EC2: acepta trafico solo desde ALB, reenvía al Backend"
+  description = "Website EC2 - only from ALB, forwards to Backend"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTP desde ALB"
+    description     = "HTTP from ALB"
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
@@ -367,7 +367,7 @@ resource "aws_security_group" "website" {
   }
 
   ingress {
-    description     = "App port desde ALB"
+    description     = "App port from ALB"
     from_port       = 3000
     to_port         = 3000
     protocol        = "tcp"
@@ -376,7 +376,7 @@ resource "aws_security_group" "website" {
 
   # Egress a CIDRs (no sg_backend ref) para evitar ciclo con sg_backend
   egress {
-    description = "Reenviar trafico a subredes privadas app (Backend)"
+    description = "Forward traffic to private app subnets (Backend)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -391,21 +391,21 @@ resource "aws_security_group" "website" {
 # ── sg_backend: capa de lógica de negocio ────────────────────
 resource "aws_security_group" "backend" {
   name        = "${local.name}-sg-backend"
-  description = "Backend EC2: acepta trafico solo desde Website, accede a RDS y NPM via NAT"
+  description = "Backend EC2 - only from Website, accesses RDS and NAT"
   vpc_id      = aws_vpc.main.id
 
-  # Ingress desde CIDRs (no sg_website ref) para evitar ciclo
+  # Ingress desde subredes publicas donde vive el ALB
   ingress {
-    description = "Puerto app desde subredes privadas (Website EC2)"
+    description = "App port from public subnets (ALB)"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = var.private_app_subnet_cidrs
+    cidr_blocks = var.public_subnet_cidrs
   }
 
   # Egress hacia RDS via CIDR (evita ciclo con sg_database si usara SG ref)
   egress {
-    description = "MySQL hacia subredes DB"
+    description = "MySQL to DB subnets"
     from_port   = 3306
     to_port     = 3306
     protocol    = "tcp"
@@ -414,7 +414,7 @@ resource "aws_security_group" "backend" {
 
   # Egress HTTPS para npm install / actualizaciones via NAT Instance
   egress {
-    description = "HTTPS hacia Internet via NAT (npm install, actualizaciones)"
+    description = "HTTPS to Internet via NAT"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
@@ -429,11 +429,11 @@ resource "aws_security_group" "backend" {
 # ── sg_database: capa de datos — completamente aislada ───────
 resource "aws_security_group" "database" {
   name        = "${local.name}-sg-database"
-  description = "RDS: acepta MySQL solo desde Backend, sin acceso a Internet"
+  description = "Database - only from Backend on port 3306"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "MySQL desde Backend"
+    description     = "MySQL from Backend"
     from_port       = 3306
     to_port         = 3306
     protocol        = "tcp"

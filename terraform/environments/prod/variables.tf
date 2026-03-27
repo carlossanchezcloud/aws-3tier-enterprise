@@ -51,3 +51,9 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "multi_az" {
+  description = "Habilitar Multi-AZ en RDS"
+  type        = bool
+  default     = false
+}

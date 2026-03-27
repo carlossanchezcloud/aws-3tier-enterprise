@@ -37,6 +37,7 @@ module "database" {
   db_subnet_ids  = module.networking.private_db_subnet_ids
   sg_database_id = module.networking.sg_database_id
   db_password    = var.db_password
+  multi_az       = var.multi_az
   tags           = local.common_tags
 }
 

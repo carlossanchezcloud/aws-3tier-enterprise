@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    Validaciones automáticas post-deploy de la arquitectura 3-tier.
+    Validaciones automaticas post-deploy de la arquitectura 3-tier.
 
 .DESCRIPTION
-    Ejecutar DESPUÉS de terraform apply.
+    Ejecutar DESPUES de terraform apply.
     Valida conectividad, Security Groups, RDS y NAT Instance.
     Genera validate_report.txt en el directorio actual.
 
@@ -11,7 +11,7 @@
     Ruta al directorio terraform/environments/prod. Default: terraform/environments/prod
 
 .PARAMETER Region
-    Región AWS. Default: us-east-1
+    Region AWS. Default: us-east-1
 
 .PARAMETER ReportFile
     Nombre del archivo de reporte. Default: validate_report.txt
@@ -85,7 +85,7 @@ Pop-Location
 
 if (-not $tfRaw) {
     Write-Host "[ERROR] No se pudieron leer los outputs de Terraform." -ForegroundColor Red
-    Write-Host "        Asegúrate de haber ejecutado terraform apply primero." -ForegroundColor Yellow
+    Write-Host "        Asegurate de haber ejecutado terraform apply primero." -ForegroundColor Yellow
     exit 1
 }
 
@@ -112,7 +112,7 @@ Write-Host "    RDS       : $RDS_ID"
 $Timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
 
 $script:Results.Add("=" * 60)
-$script:Results.Add("  REPORTE DE VALIDACION — aws-3tier-enterprise")
+$script:Results.Add("  REPORTE DE VALIDACION - aws-3tier-enterprise")
 $script:Results.Add("  $Timestamp")
 $script:Results.Add("=" * 60)
 $script:Results.Add("")
@@ -160,10 +160,10 @@ if ($tgArn) {
     $total     = $health.TargetHealthDescriptions.Count
     $healthy   = $total - $unhealthy.Count
     Write-Check -Pass ($unhealthy.Count -eq 0) `
-        "Target Group — todos los targets healthy" `
+        "Target Group - todos los targets healthy" `
         "$healthy/$total healthy"
 } else {
-    Write-Check -Pass $false "Target Group — no encontrado"
+    Write-Check -Pass $false "Target Group - no encontrado"
 }
 
 # ============================================================
@@ -240,7 +240,7 @@ Write-Check -Pass $dbOnlyBackend `
     "sg_database: ingress 3306 solo desde sg_backend" `
     "sources=$($dbSources -join ', ')"
 
-# Ningún SG tiene puerto 22 al mundo
+# Ningun SG tiene puerto 22 al mundo
 $db22 = Test-SgHasPort22Public -SgId $SG_DATABASE
 Write-Check -Pass (-not $db22) `
     "sg_database: puerto 22 NO expuesto a Internet"
@@ -272,7 +272,7 @@ if ($rds -and $rds.DBInstances.Count -gt 0) {
         "RDS engine = MySQL" `
         "version=$($db.EngineVersion)"
 } else {
-    Write-Check -Pass $false "RDS — instancia no encontrada ($RDS_ID)"
+    Write-Check -Pass $false "RDS - instancia no encontrada ($RDS_ID)"
 }
 
 # ============================================================
@@ -317,7 +317,7 @@ if ($natInstance -and $natInstance.Reservations.Count -gt 0) {
             "Rutas privadas app apuntan a ENI de NAT Instance" `
             "eni=$eniId  tablas=$($routeTables.RouteTables.Count)"
     } else {
-        Write-Check -Pass $false "Tablas de rutas privadas app — no encontradas"
+        Write-Check -Pass $false "Tablas de rutas privadas app - no encontradas"
     }
 
     # Conectividad a Internet desde EC2 privada via SSM
@@ -348,14 +348,14 @@ if ($natInstance -and $natInstance.Reservations.Count -gt 0) {
                 "EC2 privada sale a Internet via NAT" `
                 "ec2=$targetInstanceId  ip_salida=$ssmOutput  nat_ip=$NAT_PUBLIC_IP"
         } else {
-            Write-Check -Pass $false "SSM send-command — falló el envío del comando"
+            Write-Check -Pass $false "SSM send-command - fallo el envio del comando"
         }
     } else {
         Write-Check -Pass $false "No hay instancias InService en el ASG para test SSM"
     }
 
 } else {
-    Write-Check -Pass $false "NAT Instance — no encontrada ($NAT_ID)"
+    Write-Check -Pass $false "NAT Instance - no encontrada ($NAT_ID)"
 }
 
 # ============================================================
